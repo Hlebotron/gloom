@@ -4,25 +4,42 @@
 #include <math.h>
 #include <stdlib.h>
 
-const int width = 800;
-const int height = 450;
+const uint32_t WIDTH = 800;
+const uint32_t HEIGHT = 450;
+const float HORIZONTAL_FOV = 90.0;
+const float VERTICAL_FOV = 45.0;
+const float PLAYER_HEIGHT = 1.91;
 
-struct Unit {};
-struct Line {
-    int32_t A;
-    int32_t B;
-    int32_t C;
-};
-struct Line line_from_pts(
-    int32_t point1_x, 
-    int32_t point1_y, 
-    int32_t point2_x, 
-    int32_t point2_y
+typedef struct {
+    Vector2 pos;
+    float orient;
+} Player;
+typedef struct {
+    float A;
+    float B;
+    float C;
+} Line;
+typedef struct {
+    Vector2 start;
+    Vector2 end;
+    float height;
+} Wall;
+typedef struct {
+    Vector2 start;
+    Vector2 end;
+} Segment;
+Segment segment_from_points(Vector2 start, Vector2 end) {
+    Segment segment = { start, end };
+    return segment;
+}
+Line line_from_points(
+    Vector2 point1,
+    Vector2 point2
 ) {
-    int32_t A = point1_y - point2_y;
-    int32_t B = point2_x - point1_x;
-    int32_t C = A * point1_x + B * point1_y;
-    struct Line line = {
+    int A = point1.y - point2.y;
+    int B = point2.x - point1.x;
+    int C = A * point1.x + B * point1.y;
+    Line line = {
 	A,
 	B,
 	C
@@ -30,46 +47,85 @@ struct Line line_from_pts(
 
     return line; 
 }
-
-
-Vector2* intersection(
-    float orient_deg, 
-    int point_x, 
-    int point_y, 
-    int line_1x, 
-    int line_1y, 
-    int line_2x, 
-    int line_2y
+Line line_from_angle(
+    float angle_deg, //Positive is clockwise
+    float p_x, 
+    float p_y
 ) {
-    float inter_x;
-    float inter_y;
-    float orient_x = cos(orient_deg / 180 * M_PI);
-    float orient_y = sin(orient_deg / 180 * M_PI);
-
-    if (orient_x == 0) {
-	inter_y = point_y; 
-    }
-    if (orient_y == 0) {
-	inter_x = point_x; 
-    }
-    Vector2 vector = {
-	inter_x,
-	inter_y
+    float math_angle = -angle_deg;
+    float A = sin(angle_deg / 180 * M_PI);
+    float B = cos(angle_deg / 180 * M_PI);
+    float C = A * p_x + B * p_y;
+    Line line = {
+	A,
+	B,
+	C
     };
+    return line;
+};
+
+
+
+
+Vector2* intersect_lines(
+    Line line1,
+    Line line2
+) {
+    float denom = (line1.A - (line1.B * line2.A / line2.B));
+    if (denom == 0) return NULL;
+    float x = (line1.C - (line1.B * line2.C / line2.B)) / denom;
+    float y = (line2.C - (line2.A - x)) / line2.B;
     Vector2* ptr = malloc(sizeof(Vector2));
     if (ptr == NULL) {
-	printf("Allocation of Vector2 failed (Line 61)");
+	printf("Allocation of Vector2 failed");
 	exit(0);
     }
+    Vector2 vector = {
+	x,
+	y
+    };
+    *ptr = vector;
     return ptr;
 }
+Vector2* intersect_segment(
+    Segment segment,
+    Line line
+) {
+    Line seg_line = line_from_points(segment.start, segment.end);
+    Vector2* intersect = intersect_lines(seg_line, line);
+    if (
+	intersect == NULL ||
+	intersect->x < segment.start.x ||
+	intersect->x > segment.end.x
+    ) return NULL; 
+    else return intersect; 
+}
+float distance(
+    Vector2 point1,
+    Vector2 point2
+) { 
+    return sqrt(pow((point2.x - point1.x), 2) + pow((point2.y - point1.y), 2));
+};
+float displayed_height_deg(
+    Vector2 point1,
+    Vector2 point2
+) {
+    float dist = distance(point1, point2);
+};
+
 int main() {
-    InitWindow(width, height, "Gloom");
+    Segment wall = { 
+	(Vector2){ 0, 1 }, 
+	(Vector2){ 2, 2 } 
+    };
+    Line orient = line_from_angle(125, 0, 0);
+    InitWindow(WIDTH, HEIGHT, "Gloom");
     while(!WindowShouldClose()) {
+	Vector2* intersect = intersect_segment(wall, orient);
 	ClearBackground(RAYWHITE);
 	BeginDrawing();
-	DrawLine(10, 20, 50, 100, BLACK);
 	EndDrawing();
+	free(intersect);
     }
     CloseWindow();
 }

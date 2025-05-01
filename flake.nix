@@ -18,13 +18,15 @@
       inherit name system;
       builder = "${pkgs.clang}";
       args = [
-        "$(pkg-config --cflags raylib)"
+        "$( pkg-config --cflags raylib )"
         "-o"
-        "graphnixos"
-        "main.c"
-        "$(pkg-config --libs raylib)"
+        "./graphnixos"
+        "-lm"
+        "./main.c"
+        "$( pkg-config --libs raylib )"
       ];
       nativeBuildInputs = with pkgs; [ 
+        raylib
         pkg-config
       ];
       buildInputs = with pkgs; [ 
