@@ -66,8 +66,8 @@ Line line_from_angle(
     float angle_deg //Positive direction is clockwise, 0 degrees is North
 ) {
     float math_angle = -angle_deg - 90;
-    float A = sin(angle_deg / 180 * M_PI);
-    float B = cos(angle_deg / 180 * M_PI);
+    float A = sin(math_angle / 180 * M_PI);
+    float B = -cos(math_angle / 180 * M_PI);
     float C = A * point->x + B * point->y;
     Line line = {
 	A,
@@ -76,9 +76,9 @@ Line line_from_angle(
     };
     return line;
 };
-bool point_is_on_line(Vector2* point, Line* line) {
+/*bool point_is_on_line(Vector2* point, Line* line) {
     return (line->A * point->x + line->B * point->y == line->C);
-}
+}*/
 Line line_normal(Line* line, Vector2* point) {
     return (Line){
 	line->B,
@@ -86,9 +86,6 @@ Line line_normal(Line* line, Vector2* point) {
 	(line->B * point->x - line->A * point->y)
     };
 }
-
-
-
 
 IntersectionCount intersection_lines(
     Line* line1,
@@ -121,16 +118,16 @@ IntersectionCount intersection_segment(
 float hor_distance(Vector2* point1, Vector2* point2) { 
     return sqrt(pow((point2->x - point1->x), 2) + pow((point2->y - point1->y), 2));
 };
-bool line_apply(Line* line, float val, bool is_y, float* res) {
-    if (is_y) {
-	if (line->A == 0) return false;
-	*res = (line->C - (line->B * val)) / line->A;
-    } else {
-	if (line->B == 0) return false;
-	*res = (line->C - (line->A * val)) / line->B;
-    }
+bool line_apply_x(Line* line, float val, float* res) {
+    if (line->B == 0) return false;
+    *res = (line->C - (line->A * val)) / line->B;
     return true;
 }
+bool line_apply_y(Line* line, float val, float* res) {
+    if (line->A == 0) return false;
+    *res = (line->C - (line->B * val)) / line->A;
+    return true;
+};
 void displayed_angles (
     Player* player,
     Vector2* point,
@@ -229,6 +226,7 @@ void draw_segment(
 	float dist = hor_distance(&player->pos, &end);
 	Line dir_norm = line_normal(&player_dir, &end);
 	Vector2 intersection;
+
 	IntersectionCount _ = intersection_lines(&player_dir, &dir_norm, &intersection);
 	float dir_deviance = hor_distance(&intersection, &end);
 	if (dir_deviance / dist > 1) {
@@ -244,7 +242,7 @@ void draw_segment(
 	//Going through this rigamarole may not be necessary because this function is meant to be called with the finished segment (after determining the total length with other sections covering it)
 	float top, bottom;
 	displayed_angles(player, &intersection, height, &bottom, &top);
-	//Get the actual screen positions from the angles
+
 	float top_ratio = top * 2 / VERTICAL_FOV;
 	float bottom_ratio = bottom * 2 / VERTICAL_FOV;
 	int top_pos = round((SCREEN_HEIGHT / 2) * (1 - top_ratio));
@@ -268,8 +266,15 @@ int main() {
 	0	
     };
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Gloom");
-    while(player.orient < 720 && !WindowShouldClose()) {
-	/*Line player_line = line_from_angle(&player.pos, player.orient);
+    while(!WindowShouldClose()) {
+	BeginDrawing();
+	EndDrawing();
+	ClearBackground(BLACK);
+	usleep(10000);
+    }
+    /*while(player.orient < 360 && !WindowShouldClose()) {
+	Line player_line = line_from_angle(&player.pos, player.orient);
+	printf("-%f: %f, %f, %f\n", player.orient, player_line.A, player_line.B, player_line.C);
 	float y;
 	bool apply_res = line_apply(&player_line, 5, false, &y);
 	if (apply_res) {
@@ -281,18 +286,43 @@ int main() {
 	    bool res = segment_from_triangle(&normal, &fov_left, &fov_right, &result);
 	    Line result_line = line_from_points(&result.start, &result.end);
 	    printf("%f: %f, %f, %f\n", player.orient, result_line.A, result_line.B, result_line.C);
-	} else printf("fail");*/
+	} else {
+	    printf("fail");
+	}
 
-	Segment result;
+	/*Segment result;
 	bool res = segment_visibility(&player, &WALLS[1], &result);
-	printf("%f %d\n", player.orient, res);
-	ClearBackground(RAYWHITE);
+	printf("%f %d\n", player.orient, res);*/
+    	/*ClearBackground(RAYWHITE);
 	BeginDrawing();
 
 	EndDrawing();
 	player.orient += 0.1;
-	//usleep(10000);
     }
+    /*while(!WindowShouldClose()) {
+	Line line = line_from_angle(&player.pos, player.orient);
+	printf("%f: %f, %f, %f\n", player.orient, line.A, line.B, line.C);
+	float y1;
+	bool res1 = line_apply_x(&line, -500, &y1);
+	float y2;
+	bool res2 = line_apply_x(&line, 500, &y2);
+	printf("Val: %f, %f\n", y1, y2);
+	if (!res1 || !res2) continue;
+	Vector2 point1 = {
+	    200,
+	    y1 + 500
+	};
+	Vector2 point2 = {
+	    700,
+	    y2 + 500
+	};
+	BeginDrawing();
+	DrawLineV(point1, point2, RED);
+	EndDrawing();
+	ClearBackground(BLACK);
+	player.orient += 1;
+	usleep(10000);
+    }*/
     CloseWindow();
     return 0;
 }
