@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdarg.h>
 
 const uint32_t SCREEN_WIDTH = 1080;
 const uint32_t SCREEN_HEIGHT = 720;
@@ -11,12 +12,17 @@ const float HORIZONTAL_FOV = 90.0;
 const float VERTICAL_FOV = 45.0;
 const float PLAYER_HEIGHT = 1.91;
 
-
 typedef enum {
     ZERO,
     ONE,
     INFINITE
 } IntersectionCount;
+//typedef enum {
+//    CLOSED,
+//    HALF_CLOSED,
+//    HALF_OPEN,
+//    OPEN
+//} IntervalType;
 typedef struct {
     Vector2 pos;
     float orient;
@@ -58,7 +64,6 @@ Line line_from_points(
 	B,
 	C
     };
-
     return line; 
 }
 Line line_from_angle(
@@ -128,7 +133,7 @@ bool line_apply_y(Line* line, float val, float* res) {
     *res = (line->C - (line->B * val)) / line->A;
     return true;
 };
-void displayed_angles (
+void displayed_angles_y (
     Player* player,
     Vector2* point,
     float obj_height,
@@ -136,24 +141,41 @@ void displayed_angles (
     float* top
 ) {
     float dist = hor_distance(&player->pos, point);
-    if (dist == 0) {
+    if (dist == 0 && obj_height >= PLAYER_HEIGHT) {
 	*top = VERTICAL_FOV / 2;	
 	*bottom = VERTICAL_FOV / 2;	
 	return;
     }
 
-    //Lines are in the "3D plane"
-    float fov_deg[2] = {
-	player->orient - 90 + (VERTICAL_FOV / 2),
-	player->orient - 90 - (VERTICAL_FOV / 2)
-    };
+    //Lines are in the "3D plane" (Y axis)
+    /*float fov_deg[2] = {
+	//Is player->orient actually needed
+	(VERTICAL_FOV / 2),
+	-(VERTICAL_FOV / 2)
+    };*/
+    Line wall_line = line_from_points(&(Vector2){-dist, 0}, &(Vector2){-dist, 1});
+    //First fov_edge is bottom, second is top
     for (int i = 0; i < 2; i++) {
-	Line fov_edge = line_from_angle(&player->pos, fov_deg[i]);
-	
+	float fov_deg;
+	if (i == 1) 
+	    fov_deg = VERTICAL_FOV / 2;
+	else 
+	    fov_deg = -(VERTICAL_FOV / 2);
+	Line fov_edge = line_from_angle(&player->pos, fov_deg);
+	Vector2 intersection;
+	IntersectionCount count = intersection_lines(&fov_edge, &wall_line, &intersection);	
+	//TODO: What happens if the lines are parallel? (eg. 180 deg)
+	//  Panic for now
+	if (count != ONE) exit(0);
+	//Deduce if the point is on the segment
+	//What to do with that info though?
+	//  It decides if the line reaches to the top or bottom of the screen
+	if (intersection.y > obj_height) {
+	    
+	};
     }
 
 };
-//Potentially incorrect semantically
 bool segment_from_triangle(Line* seg_line, Line* line1, Line* line2, Segment* result) {
     Line* lines[2] = { line1, line2 };
     Vector2 ends[2];
@@ -166,56 +188,61 @@ bool segment_from_triangle(Line* seg_line, Line* line1, Line* line2, Segment* re
     *result = (Segment){ ends[0], ends[1] };
     return true;
 }
-inline bool is_between(float val, float begin, float end) {
+//Closed interval
+inline bool is_between_c(float val, float begin, float end) {
     return (val >= begin && val <= end);
 }
-bool segment_visibility(Player* player, Segment* segment, Segment* result) {
+//Half-closed interval
+inline bool is_between_hc(float val, float begin, float end) {
+    return (val >= begin && val < end);
+}
+bool is_segment_visible(Player* player, Segment* segment, Segment* result) {
+    bool result = false;
     Line vision_line = line_from_angle(&player->pos, player->orient);
     Vector2 ends[2] = { segment->start, segment->end };
     Line fov_left = line_from_angle(&player->pos, player->orient - (HORIZONTAL_FOV / 2));
     Line fov_right = line_from_angle(&player->pos, player->orient + (HORIZONTAL_FOV / 2));
+
     for (int i = 0; i < 2; i++) {
 	Vector2 end = ends[i];
-	Line normal = line_normal(&vision_line, &end);
-	/*for (int j = 0; j < 2; j++) {
-	    Vector2 intersection;
-	    //If FOV is 180 deg, then it's possible that there are no intersections
-	    IntersectionCount _ = intersection_lines(&fov_edges[j], &normal, &intersection);
-	    //Compare coords of intersection and segment end
-	    //PLAN:
-	    //Get normal and edge intersections, then compare their coords
-	    //That's how I'll know which end of the segment to compare to which FOV-normal intersection (probably)
-	    //	What if the segment ends are the same distance from the intersections?
-	}*/
+	float start_x = segment->start.x;
+	float start_y = segment->start.y;
+	float end_x = segment->end.x;
+	float end_y = segment->end.y;
 	Segment segment;
+
+	Line normal = line_normal(&vision_line, &end);
 	bool res = segment_from_triangle(&normal, &fov_left, &fov_right, &segment);
 	if (!res) {
 	    printf("At least one line is the same as the normal line (FOV >= 180 deg)");
 	    return false;
 	}
-	float start_x = segment.start.x;
-	float start_y = segment.start.y;
-	float end_x = segment.end.x;
-	float end_y = segment.end.y;
 	if (
-	    (( start_x <= end_x && is_between(end.x, start_x, end_x) )
+	    (( start_x <= end_x && is_between_c(end.x, start_x, end_x) )
 	    ||
-	    ( start_x >= end_x && is_between(end.x, end_x, start_x) ))
+	    ( start_x >= end_x && is_between_c(end.x, end_x, start_x) ))
 	    &&
-	    (( start_y <= end_y && is_between(end.y, start_y, end_y) )
+	    (( start_y <= end_y && is_between_c(end.y, start_y, end_y) )
 	    ||
-	    ( start_y >= end_y && is_between(end.y, end_y, start_y) ))
-	) return true;
+	    ( start_y >= end_y && is_between_c(end.y, end_y, start_y) ))
+	) result = true;
     }
-    return false;
     //TODO: Orientation of player also decides in visibility
+    //The player's position splits the line in two, one half will go in quadrant q, then other one will go into q + 2
+    //The orientation of the player will decide which quadrant is the right one
+    float player_mod = fmod(player->orient, 360);
+    bool is_right = !is_between_hc(player_mod, 90, 270);
+    bool is_top = is_between_hc(player_mod, 0, 180);
+    //Perhaps the x and y isn't what I should use, perhaps it's the FOV lines' orientations in degrees (player->orient +- HORIZONTAL_FOV / 2) 
+    //What happens with the coords of the segment ends?
+    if (is_right ^ x > player->pos.x) result = false;
+    if (is_top ^ y > player->pos.y) result = false;
 }
 void draw_segment(
     const Segment* segment, 
     Player* player, 
     float height
 ) {
-    Vector2 vertices[5];
     Vector2 ends[2] = { segment->start, segment->end };
     int hor_positions[2];
     int vert_positions[4];
@@ -226,8 +253,7 @@ void draw_segment(
 	float dist = hor_distance(&player->pos, &end);
 	Line dir_norm = line_normal(&player_dir, &end);
 	Vector2 intersection;
-
-	IntersectionCount _ = intersection_lines(&player_dir, &dir_norm, &intersection);
+	intersection_lines(&player_dir, &dir_norm, &intersection);
 	float dir_deviance = hor_distance(&intersection, &end);
 	if (dir_deviance / dist > 1) {
 	    //printf("Player angle: %f, Ratio %d: %f\n", player->orient, i, dir_deviance / dist);
@@ -241,7 +267,7 @@ void draw_segment(
 	//  Especially at 180 degrees
 	//Going through this rigamarole may not be necessary because this function is meant to be called with the finished segment (after determining the total length with other sections covering it)
 	float top, bottom;
-	displayed_angles(player, &intersection, height, &bottom, &top);
+	displayed_angles_y(player, &intersection, height, &bottom, &top);
 
 	float top_ratio = top * 2 / VERTICAL_FOV;
 	float bottom_ratio = bottom * 2 / VERTICAL_FOV;
@@ -250,14 +276,14 @@ void draw_segment(
 	vert_positions[i] = bottom_pos;
 	vert_positions[i + 1] = bottom_pos;
     }
-    Vector2 points[5] = {
+    Vector2 vertices[5] = {
 	(Vector2){ hor_positions[0], vert_positions[0] },
 	(Vector2){ hor_positions[0], vert_positions[1] },
 	(Vector2){ hor_positions[1], vert_positions[3] },
 	(Vector2){ hor_positions[1], vert_positions[2] },
 	(Vector2){ hor_positions[0], vert_positions[0] }
     };
-    DrawSplineLinear(&points[0], 5, 1, RED);
+    DrawSplineLinear(&vertices[0], 5, 1, RED);
 }
 
 int main() {
@@ -290,16 +316,16 @@ int main() {
 	    printf("fail");
 	}
 
-	/*Segment result;
+	Segment result;
 	bool res = segment_visibility(&player, &WALLS[1], &result);
-	printf("%f %d\n", player.orient, res);*/
-    	/*ClearBackground(RAYWHITE);
+	printf("%f %d\n", player.orient, res);
+    	ClearBackground(RAYWHITE);
 	BeginDrawing();
 
 	EndDrawing();
 	player.orient += 0.1;
     }
-    /*while(!WindowShouldClose()) {
+    while(!WindowShouldClose()) {
 	Line line = line_from_angle(&player.pos, player.orient);
 	printf("%f: %f, %f, %f\n", player.orient, line.A, line.B, line.C);
 	float y1;
